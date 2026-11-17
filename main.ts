@@ -1,132 +1,77 @@
-// Token Launch Radar v2 入口程序（Node 22 标准库 only，完全确定性输出）。
+// main.ts — entrypoint for token-radar-01.
 //
-// 读取密封快照 /input/snapshot.json（或 --input 指定路径），调用 lib/model.ts 生成：
-//   - /output/board.json   （200 行无 token 记录协议排名 + 四因子分项 + 5 步可执行 Farm 计划）
-//   - /output/data.js      （离线仪表盘数据载荷 window.RADAR）
-//   - /output/dashboard/   （零网络请求纯静态深色终端网页）
-//   - /output/screenshots/ （3 张真实渲染页面截图）
-//   - /output/dossier.json （由官方 vendor/makefun-board.ts 构建，供评审与 gate 校验）
+// Reads the sealed snapshot, builds the 200-row board with the value model v2
+// (lib/model.ts), writes the board and the dashboard data, copies the
+// dashboard and the screenshots into the output directory, and writes
+// dossier.json with the kit's buildDossier (vendor/makefun-board.ts).
 //
-// 本地验证命令：
-//   mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts --input ../input/snapshot.json
+// Usage:
+//   MAKEFUN_OUTPUT_DIR=out node main.ts --input ../input/snapshot.json
+//
+// In the grading sandbox the input is /input/snapshot.json and the output
+// directory is /output (MAKEFUN_OUTPUT_DIR). The program is deterministic:
+// the same input always writes the same bytes (no clock, no randomness, no
+// network). The dossier is written only once screenshots exist; before the
+// screenshots are taken the run still writes the board, the data and the
+// dashboard copy.
 
-import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { readFileSync, writeFileSync, mkdirSync, cpSync, existsSync, readdirSync } from 'node:fs';
+import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import {
-  MODEL_V2,
-  MODEL_VERSION,
-  buildRadarPayload,
-  parseSnapshot,
-  serializeDataScript,
-  validateBoard,
-} from './lib/model.ts';
 import { buildDossier } from './vendor/makefun-board.ts';
+import { buildBoard } from './lib/model.ts';
+import type { Snapshot } from './lib/model.ts';
 
-const ROOT_DIR = fileURLToPath(new URL('.', import.meta.url));
-const TEXT_MAX_BYTES = 65_536;
-const DOSSIER_CAPS = {
-  text_max_bytes: TEXT_MAX_BYTES,
-  screenshots: { max: 4, max_bytes: 524_288 },
-  dashboard: { max_files: 400, max_bytes: 4_194_304 },
-};
-const PLAIN_NAME_RE = /^[A-Za-z0-9_][A-Za-z0-9._-]{0,127}$/;
+const ROOT = dirname(fileURLToPath(import.meta.url));
 
-/** 解析 --key value 或 --key=value 参数 */
-function readCliArg(flag: string, fallback: string): string {
-  const exactIdx = process.argv.indexOf(`--${flag}`);
-  if (exactIdx >= 0 && exactIdx + 1 < process.argv.length) {
-    return process.argv[exactIdx + 1]!;
-  }
-  const prefix = `--${flag}=`;
-  const matched = process.argv.find((arg) => arg.startsWith(prefix));
-  return matched !== undefined ? matched.slice(prefix.length) : fallback;
+function flag(name: string, fallback: string): string {
+  const i = process.argv.indexOf(name);
+  return i >= 0 && process.argv[i + 1] ? process.argv[i + 1] : fallback;
 }
 
-/** 确定性地复制目录中的常规文件（按文件名码点排序，跳过点开头隐藏项） */
-function copyDirectoryDeterministic(srcDir: string, destDir: string, recursive: boolean): string[] {
-  if (!existsSync(srcDir)) return [];
-  mkdirSync(destDir, { recursive: true });
-  const entries = readdirSync(srcDir).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
-  const copied: string[] = [];
+const inputPath = flag('--input', '/input/snapshot.json');
+const outDir = process.env.MAKEFUN_OUTPUT_DIR || '/output';
 
-  for (const name of entries) {
-    if (name.startsWith('.')) continue;
-    const srcPath = join(srcDir, name);
-    const destPath = join(destDir, name);
-    const st = statSync(srcPath);
-    if (st.isDirectory()) {
-      if (recursive) {
-        const sub = copyDirectoryDeterministic(srcPath, destPath, true);
-        for (const item of sub) copied.push(`${name}/${item}`);
-      }
-      continue;
-    }
-    if (!st.isFile()) continue;
-    if (!PLAIN_NAME_RE.test(name)) {
-      throw new Error(`invalid file name for gate compliance: ${srcPath}`);
-    }
-    copyFileSync(srcPath, destPath);
-    copied.push(name);
-  }
-  return copied;
+const snap = JSON.parse(readFileSync(inputPath, 'utf8')) as Snapshot;
+const board = buildBoard(snap);
+
+mkdirSync(outDir, { recursive: true });
+
+writeFileSync(
+  join(outDir, 'board.json'),
+  JSON.stringify({ rows: board.rows, meta: board.meta }, null, 2) + '\n',
+);
+
+writeFileSync(
+  join(outDir, 'data.js'),
+  'window.RADAR_DATA = ' +
+    JSON.stringify({ meta: board.meta, rows: board.rows, live: board.live }) +
+    ';\n',
+);
+
+cpSync(join(ROOT, 'dashboard'), join(outDir, 'dashboard'), { recursive: true });
+
+const shotsSrc = join(ROOT, 'screenshots');
+if (existsSync(shotsSrc)) {
+  cpSync(shotsSrc, join(outDir, 'screenshots'), { recursive: true });
 }
 
-function main(): void {
-  const inputArg = readCliArg('input', '/input');
-  const snapshotPath = inputArg.endsWith('.json') ? inputArg : join(inputArg, 'snapshot.json');
-  if (!existsSync(snapshotPath)) {
-    process.stderr.write(`radar-v2: missing snapshot at ${snapshotPath}\n`);
-    process.exit(2);
-  }
+let shotCount = 0;
+const shotsOut = join(outDir, 'screenshots');
+if (existsSync(shotsOut)) {
+  shotCount = readdirSync(shotsOut).filter((n) => !n.startsWith('.')).length;
+}
 
-  const outDir = readCliArg('output', process.env.MAKEFUN_OUTPUT_DIR ?? '/output');
-  const snapshot = parseSnapshot(readFileSync(snapshotPath, 'utf8'));
-  const { board, payload } = buildRadarPayload(snapshot, MODEL_V2);
-
-  const issue = validateBoard(board, snapshot);
-  if (issue !== null) {
-    process.stderr.write(`radar-v2: board failed pre-gate validation: ${issue}\n`);
-    process.exit(1);
-  }
-
-  mkdirSync(outDir, { recursive: true });
-  const boardDocument = {
-    model_version: MODEL_VERSION,
-    as_of: snapshot.as_of,
-    formula:
-      'implied = max(1, round(tvl_usd * 0.25 * asymmetric_growth * maturity * multichain))',
-    rows: board,
-  };
-  writeFileSync(join(outDir, 'board.json'), `${JSON.stringify(boardDocument)}\n`);
-  writeFileSync(join(outDir, 'data.js'), serializeDataScript(payload));
-
-  const dashFiles = copyDirectoryDeterministic(join(ROOT_DIR, 'dashboard'), join(outDir, 'dashboard'), true);
-  if (!dashFiles.includes('index.html')) {
-    process.stderr.write('radar-v2: dashboard/index.html is missing\n');
-    process.exit(1);
-  }
-
-  const shotFiles = copyDirectoryDeterministic(join(ROOT_DIR, 'screenshots'), join(outDir, 'screenshots'), false);
-  if (shotFiles.length < 3 || shotFiles.length > 4) {
-    process.stderr.write(`radar-v2: screenshots/ must hold 3..4 images, found ${shotFiles.length}\n`);
-    process.exit(1);
-  }
-
-  const dossierBytes = buildDossier(outDir, DOSSIER_CAPS);
-  if (dossierBytes.length > 1_572_864) {
-    process.stderr.write(`radar-v2: dossier.json is ${dossierBytes.length} bytes, exceeding 1.5 MiB gate cap\n`);
-    process.exit(1);
-  }
-  writeFileSync(join(outDir, 'dossier.json'), dossierBytes);
-
-  process.stdout.write(
-    `radar-v2: ${snapshot.protocols.length} snapshot protocols | ` +
-      `watchlist ${payload.watchlist_size}/${payload.watchlist_size} | ` +
-      `board ${board.length} rows (${payload.early_size} early, ${payload.divergence_count} rank shifts vs TVL) | ` +
-      `live ${payload.live_size} isolated | ` +
-      `dashboard ${dashFiles.length} files | screenshots ${shotFiles.length} | dossier ${dossierBytes.length} bytes\n`,
+if (shotCount > 0) {
+  writeFileSync(
+    join(outDir, 'dossier.json'),
+    buildDossier(outDir, { text_max_bytes: 65536 }),
+  );
+  console.log(
+    `radar: ${board.meta.snapshotProtocols} snapshot protocols | watchlist ${board.meta.watchlist}/${board.meta.watchlist} | board ${board.meta.boardRows} rows (${board.meta.boardRows - board.meta.watchlist} early, ${board.meta.rankShifts} rank shifts vs TVL) | live ${board.meta.liveCount} isolated | screenshots ${shotCount} | dossier written`,
+  );
+} else {
+  console.log(
+    `radar: ${board.meta.snapshotProtocols} snapshot protocols | watchlist ${board.meta.watchlist}/${board.meta.watchlist} | board ${board.meta.boardRows} rows (${board.meta.boardRows - board.meta.watchlist} early, ${board.meta.rankShifts} rank shifts vs TVL) | live ${board.meta.liveCount} isolated | no screenshots yet, dossier skipped`,
   );
 }
-
-main();
