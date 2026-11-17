@@ -3,12 +3,70 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Token Launch Radar v2 — Pre-Token Protocol Screener</title>
+<title>Token Launch Radar — Value Model v2</title>
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-<a class="skip-link" href="#radar-root">Skip to radar board</a>
-<div id="radar-root" class="radar-shell" tabindex="-1" aria-busy="true"></div>
+<header class="top">
+  <div class="brand">
+    <div class="radar-emblem" aria-hidden="true">
+      <div class="re-ring"></div>
+      <div class="re-ring re-ring-sm"></div>
+      <div class="re-cross-v"></div>
+      <div class="re-cross-h"></div>
+      <div class="re-sweep"></div>
+      <div class="re-line"></div>
+      <div class="re-dot re-dot-teal"></div>
+      <div class="re-dot re-dot-amber"></div>
+    </div>
+    <div>
+      <div class="brand-title">TOKEN LAUNCH RADAR <span>// RADAR-V2</span></div>
+      <div class="brand-sub">Pre-token-record screener &amp; deterministic farm planner</div>
+    </div>
+  </div>
+  <div class="badges" id="badges"></div>
+</header>
+
+<main>
+  <h1>Pre-Token Protocol Radar: Value Model v2 &amp; Execution Plans</h1>
+  <p class="lede" id="lede"></p>
+
+  <section class="kpis" id="kpis"></section>
+
+  <section class="panels">
+    <div class="panel">
+      <div class="panel-head">Model v2 Formula (computeImpliedValue) <span class="pill">10-field pure derivation</span></div>
+      <div class="formula">implied = max(1, round( tvl_usd * 0.25 * growthMult * maturityMult * chainMult ))</div>
+      <ol class="factors">
+        <li><b>Asymmetric 7d Growth:</b> clamp(-60%, +120%); upside +0.5x vs downside -1x penalty (capital flight weighs 2x).</li>
+        <li><b>Age Maturity:</b> 0.6 + min(age, 1095d)/1095 * 0.4 (unlisted fallback 365d; caps at 1.00x).</li>
+        <li><b>Multi-Chain Reach:</b> 1.00 + 0.03 * min(chains - 1, 5) (caps at 1.15x at 6+ chains to prevent tail bloat).</li>
+      </ol>
+      <p class="fine">Every value is derived strictly from the snapshot's own figures. No hardcoded name list, no manual ranking.</p>
+    </div>
+    <div class="panel">
+      <div class="panel-head">Top Categories in Current View <span class="pill" id="chart-count"></span></div>
+      <div id="chart"></div>
+    </div>
+  </section>
+
+  <section class="toolbar" id="toolbar"></section>
+
+  <section class="table-wrap">
+    <table id="board">
+      <thead><tr id="head-row"></tr></thead>
+      <tbody id="body-rows"></tbody>
+    </table>
+    <div class="empty" id="empty" hidden>No protocols match the active filters.</div>
+  </section>
+
+  <aside class="drawer" id="drawer" hidden></aside>
+</main>
+
+<footer>
+  <p>Method: implied value is derived strictly from the snapshot's own figures (TVL, 7-day growth, age with no token on record, chain count). No hardcoded name list. Every protocol that records a token is kept out of the ranking board and shown separately as Live Tokens. Language: a protocol is said to record no token, never that it has none; no airdrop is promised or guaranteed.</p>
+</footer>
+
 <script src="../data.js"></script>
 <script src="radar.js"></script>
 </body>
