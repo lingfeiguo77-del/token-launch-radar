@@ -1,0 +1,4 @@
+out/
+*.tar.gz
+wallet.json
+.DS_Store
