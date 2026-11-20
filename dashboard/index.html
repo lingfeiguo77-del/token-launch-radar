@@ -1,72 +1,69 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Token Launch Radar — Value Model v2</title>
+<title>Token Launch Radar — Model v3 (Sqrt)</title>
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-<header class="top">
-  <div class="brand">
-    <div class="radar-emblem" aria-hidden="true">
-      <div class="re-ring"></div>
-      <div class="re-ring re-ring-sm"></div>
-      <div class="re-cross-v"></div>
-      <div class="re-cross-h"></div>
-      <div class="re-sweep"></div>
-      <div class="re-line"></div>
-      <div class="re-dot re-dot-teal"></div>
-      <div class="re-dot re-dot-amber"></div>
-    </div>
-    <div>
-      <div class="brand-title">TOKEN LAUNCH RADAR <span>// RADAR-V2</span></div>
-      <div class="brand-sub">Pre-token-record screener &amp; deterministic farm planner</div>
-    </div>
+<header class="topbar">
+  <div>
+    <h1>TOKEN LAUNCH RADAR <span class="dim">// MODEL V3 (SQRT)</span></h1>
+    <p class="sub">Pre-token-record screener, factor visualizer and tier-calibrated farm planner</p>
   </div>
   <div class="badges" id="badges"></div>
 </header>
-
+<section class="hero">
+  <h2>Pre-Token Protocol Radar: Sqrt-Scale Valuation and De-Templated Farm Plans</h2>
+  <p>Covers every watchlist protocol plus early pre-token-record protocols below the floor. Live-token protocols are isolated in a separate view. Every figure derives from the ten snapshot fields with zero hardcoded names. Protocols record no token in this snapshot; no airdrop or launch is promised.</p>
+</section>
+<section class="cards" id="cards"></section>
+<section class="panels">
+  <div class="panel">
+    <h3>Value Model v3 (computeImpliedValue) <span class="tag">10-field pure derivation</span></h3>
+    <code class="formula">implied = round( sqrt(tvl_usd) * 5000 * growthMult * maturityMult * chainMult )</code>
+    <p><strong>Why sqrt(TVL):</strong> compresses a 100x TVL gap into a 10x anchor gap so fundamentals can reorder ranks instead of decorating a TVL table.</p>
+    <ol>
+      <li>Asymmetric 7d growth: clamp(-60, +120); rises count 0.55x, falls 1.10x; missing counts as 0.</li>
+      <li>Operating maturity: 0.55 + min(age, 1095d)/1095 * 0.45; missing listing date counts as 365d.</li>
+      <li>Multi-chain reach: 1.00 + 0.03 per extra chain, capped at seven chains (1.18x).</li>
+    </ol>
+  </div>
+  <div class="panel">
+    <h3>Implied Value by Category <span class="tag" id="catScope">200 protocols</span></h3>
+    <div id="catChart"></div>
+    <p class="legend"><span class="dot teal"></span> Watchlist <span class="dot amber"></span> Early</p>
+  </div>
+</section>
+<section class="filters">
+  <label>View
+    <span class="seg"><button id="viewBoard" class="on">Board</button><button id="viewLive">Live Tokens</button></span>
+  </label>
+  <label>Tier
+    <span class="seg"><button data-tier="all" class="tier on">All</button><button data-tier="watchlist" class="tier">Watchlist</button><button data-tier="early" class="tier">Early</button></span>
+  </label>
+  <label>Category <select id="catSel"></select></label>
+  <label>Chain <select id="chainSel"></select></label>
+  <label>Search <input id="q" type="search" placeholder="Filter name, slug, chain..."></label>
+  <button id="reset">Reset</button>
+  <span id="showing" class="dim"></span>
+</section>
 <main>
-  <h1>Pre-Token Protocol Radar: Value Model v2 &amp; Execution Plans</h1>
-  <p class="lede" id="lede"></p>
-
-  <section class="kpis" id="kpis"></section>
-
-  <section class="panels">
-    <div class="panel">
-      <div class="panel-head">Model v2 Formula (computeImpliedValue) <span class="pill">10-field pure derivation</span></div>
-      <div class="formula">implied = max(1, round( tvl_usd * 0.25 * growthMult * maturityMult * chainMult ))</div>
-      <ol class="factors">
-        <li><b>Asymmetric 7d Growth:</b> clamp(-60%, +120%); upside +0.5x vs downside -1x penalty (capital flight weighs 2x).</li>
-        <li><b>Age Maturity:</b> 0.6 + min(age, 1095d)/1095 * 0.4 (unlisted fallback 365d; caps at 1.00x).</li>
-        <li><b>Multi-Chain Reach:</b> 1.00 + 0.03 * min(chains - 1, 5) (caps at 1.15x at 6+ chains to prevent tail bloat).</li>
-      </ol>
-      <p class="fine">Every value is derived strictly from the snapshot's own figures. No hardcoded name list, no manual ranking.</p>
-    </div>
-    <div class="panel">
-      <div class="panel-head">Top Categories in Current View <span class="pill" id="chart-count"></span></div>
-      <div id="chart"></div>
-    </div>
-  </section>
-
-  <section class="toolbar" id="toolbar"></section>
-
-  <section class="table-wrap">
-    <table id="board">
-      <thead><tr id="head-row"></tr></thead>
-      <tbody id="body-rows"></tbody>
-    </table>
-    <div class="empty" id="empty" hidden>No protocols match the active filters.</div>
-  </section>
-
-  <aside class="drawer" id="drawer" hidden></aside>
+  <table id="boardTable">
+    <thead><tr>
+      <th data-sort="rank">Rank / Shift</th><th>Protocol and Farm Sizing</th>
+      <th data-sort="tvl">TVL (Rank)</th><th data-sort="growth">7d Change</th>
+      <th data-sort="age">Age</th><th>Chains</th><th data-sort="implied">Implied Value (v3)</th><th>Record</th>
+    </tr></thead>
+    <tbody id="tbody"></tbody>
+  </table>
+  <div id="liveWrap" hidden></div>
 </main>
-
-<footer>
-  <p>Method: implied value is derived strictly from the snapshot's own figures (TVL, 7-day growth, age with no token on record, chain count). No hardcoded name list. Every protocol that records a token is kept out of the ranking board and shown separately as Live Tokens. Language: a protocol is said to record no token, never that it has none; no airdrop is promised or guaranteed.</p>
-</footer>
-
+<aside id="drawer" hidden>
+  <button id="drawerClose">Close</button>
+  <div id="drawerBody"></div>
+</aside>
 <script src="../data.js"></script>
 <script src="radar.js"></script>
 </body>
